@@ -3710,7 +3710,7 @@ EbErrorType generate_md_stage_0_cand(PictureControlSet* pcs, ModeDecisionContext
     //----------------------
     // Intra
     if (ctx->intra_ctrls.enable_intra) {
-        uint8_t dc_cand_only_flag = ctx->intra_ctrls.intra_mode_end == DC_PRED || is_dc_only_safe(pcs, ctx);
+        uint8_t dc_cand_only_flag = 1; // turboav1: force all-DC + DCT_DCT oracle for the conformant 64x64 bridge
         if (ctx->cand_reduction_ctrls.cand_elimination_ctrls.enabled) {
             eliminate_candidate_based_on_pme_me_results(ctx, &dc_cand_only_flag);
         }

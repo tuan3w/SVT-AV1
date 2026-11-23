@@ -49,6 +49,52 @@ static void mem_put_varsize(uint8_t* const dst, const int sz, const int val) {
     }
 }
 
+/* ---- turboav1: inject v9 GPU-computed coefficients into SVT's entropy coder ----
+ * The all-DC force patch (mode_decision.c dc_cand_only_flag=1) gives a
+ * deterministic 64x64 all-DC + DCT_DCT frame. This loader reads v9's sparse
+ * coefficients (64 blocks x [nnz, (idx,val)*nnz], idx = raster 0..63) and
+ * swaps them into the coeff_buffer before entropy coding. SVT re-derives
+ * txb_skip from the injected eob, so the frame header stays consistent.
+ * Scan order for eob: standard AV1 8x8 diagonal. */
+#define V9SCAN8_0  0, 1, 8, 16, 9, 2, 3, 10
+#define V9SCAN8_1  17, 24, 32, 25, 18, 11, 4, 5
+#define V9SCAN8_2  12, 19, 26, 33, 40, 48, 41, 34
+#define V9SCAN8_3  27, 20, 13, 6, 7, 14, 21, 28
+#define V9SCAN8_4  35, 42, 49, 56, 57, 50, 43, 36
+#define V9SCAN8_5  29, 22, 15, 23, 30, 37, 44, 51
+#define V9SCAN8_6  58, 59, 52, 45, 38, 31, 39, 46
+#define V9SCAN8_7  53, 60, 61, 54, 47, 55, 62, 63
+static const int16_t v9scan8[64] = { V9SCAN8_0, V9SCAN8_1, V9SCAN8_2, V9SCAN8_3,
+                                     V9SCAN8_4, V9SCAN8_5, V9SCAN8_6, V9SCAN8_7 };
+static int16_t g_v9coeff[64][64]; /* 64 blocks x 64 raster coeffs, 0 = skip */
+static uint16_t g_v9eob[64];
+static int g_v9inject = 0;
+
+int v9_inject_load(const char *path) {
+    FILE *f = fopen(path, "rb");
+    if (!f) { fprintf(stderr, "v9_inject: cannot open %s\n", path); return -1; }
+    int16_t raw[64][1 + 64 * 2];
+    size_t got = fread(raw, sizeof(int16_t), 64 * (1 + 128), f);
+    fclose(f);
+    if (got != 64 * 129) { fprintf(stderr, "v9_inject: short read %zu\n", got); return -1; }
+    for (int b = 0; b < 64; b++) {
+        for (int i = 0; i < 64; i++) g_v9coeff[b][i] = 0;
+        int nnz = raw[b][0];
+        uint16_t eob = 0;
+        for (int i = 0; i < nnz && i < 64; i++) {
+            int idx = raw[b][1 + i * 2];
+            int val = raw[b][1 + i * 2 + 1];
+            g_v9coeff[b][idx] = (int16_t)val;
+        }
+        for (int c = 63; c >= 0; c--) {
+            if (g_v9coeff[b][v9scan8[c]] != 0) { eob = c + 1; break; }
+        }
+        g_v9eob[b] = eob;
+    }
+    g_v9inject = 1;
+    return 0;
+}
+
 int svt_aom_get_comp_index_context_enc(PictureParentControlSet* pcs, int cur_frame_index, int bck_frame_index,
                                        int fwd_frame_index, const MacroBlockD* xd) {
     const int fwd = abs(svt_aom_get_relative_dist_enc(&pcs->scs->seq_header, fwd_frame_index, cur_frame_index));
@@ -572,6 +618,19 @@ static EbErrorType av1_encode_tx_coef_y(PictureControlSet* pcs, EntropyCodingCon
         const uint32_t tx_y = blk_org_y + org.y;
 
         int32_t* coeff_buffer = (int32_t*)coeff_ptr->y_buffer + ec_ctx->coded_area_sb;
+
+        /* turboav1: inject v9 GPU coefficients (64x64 all-DC + DCT_DCT frame) */
+        if (!g_v9inject && tx_width == 8 && tx_height == 8) {
+            const char *p = getenv("V9_INJECT_FILE");
+            if (p) v9_inject_load(p);
+        }
+        if (g_v9inject && tx_width == 8 && tx_height == 8) {
+            int raster = (int)(tx_y >> 3) * 8 + (int)(tx_x >> 3);
+            if (raster >= 0 && raster < 64) {
+                for (int i = 0; i < 64; i++) coeff_buffer[i] = (int32_t)g_v9coeff[raster][i];
+                blk_ptr->eob.y[txb_itr] = g_v9eob[raster];
+            }
+        }
 
         int16_t txb_skip_ctx = 0;
         int16_t dc_sign_ctx  = 0;
