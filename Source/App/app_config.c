@@ -152,6 +152,7 @@
 #define ENABLE_RESTORATION_TOKEN "--enable-restoration"
 #define MFMV_ENABLE_NEW_TOKEN "--enable-mfmv"
 #define DG_ENABLE_NEW_TOKEN "--enable-dg"
+#define TURBO_TOKEN "--turbo"
 #define FAST_DECODE_TOKEN "--fast-decode"
 #define ADAPTIVE_QP_ENABLE_NEW_TOKEN "--aq-mode"
 #define INPUT_FILE_LONG_TOKEN "--input"
@@ -944,6 +945,7 @@ ConfigDescription config_entry_specific[] = {
     {ENABLE_RESTORATION_TOKEN, "Enable loop restoration filter, default is 1 [0-1]"},
     {MFMV_ENABLE_NEW_TOKEN, "Motion Field Motion Vector control, default is -1 [-1: auto, 0-1]"},
     {DG_ENABLE_NEW_TOKEN, "Dynamic GoP control, default is 1 [0-1]"},
+    {TURBO_TOKEN, "turboav1: skip PD0 pre-pass + cap 64x64 (partition-search speedup), default 0 [0-1]"},
 #if CONFIG_ENABLE_FAST_DECODE_3
     {FAST_DECODE_TOKEN, "Fast Decoder levels, default is 0 [0-3, 3: 2 plus still-image (avif) decode-speed settings]"},
 #else
@@ -1185,6 +1187,7 @@ ConfigEntry config_entry[] = {
     {ENABLE_RESTORATION_TOKEN, "EnableRestoration", set_cfg_generic_token},
     {MFMV_ENABLE_NEW_TOKEN, "Mfmv", set_cfg_generic_token},
     {DG_ENABLE_NEW_TOKEN, "EnableDg", set_cfg_generic_token},
+    {TURBO_TOKEN, "turbo", set_cfg_generic_token},
     {FAST_DECODE_TOKEN, "FastDecode", set_cfg_generic_token},
     {TUNE_TOKEN, "Tune", set_cfg_generic_token},
     //   ALT-REF filtering support

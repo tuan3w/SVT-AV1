@@ -10,6 +10,8 @@
 */
 
 #include <inttypes.h>
+#include "svt_prof.h"
+SVT_PROF_DEFINE(pican)
 #include <stdlib.h>
 #include <string.h>
 
@@ -1989,7 +1991,14 @@ static void vmaf_preprocess_frame(PictureAnalysisContext* pa_ctx, PictureParentC
  *then used to compute statistics
  *
  ********************************************************************************/
+EbErrorType svt_aom_picture_analysis_kernel_iter_impl(void* context);
 EbErrorType svt_aom_picture_analysis_kernel_iter(void* context) {
+    uint64_t _t0 = svt_prof_start();
+    EbErrorType _e = svt_aom_picture_analysis_kernel_iter_impl(context);
+    svt_prof_stop(pican, _t0);
+    return _e;
+}
+EbErrorType svt_aom_picture_analysis_kernel_iter_impl(void* context) {
     PictureAnalysisContext*  pa_ctx = (PictureAnalysisContext*)context;
     PictureParentControlSet* pcs;
 

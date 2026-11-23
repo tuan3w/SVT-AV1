@@ -4525,6 +4525,8 @@ static void copy_api_from_app(SequenceControlSet* scs, EbSvtAv1EncConfiguration*
 
     // Dynamic GoP
     scs->static_config.enable_dg = config_struct->enable_dg;
+    // turboav1
+    scs->static_config.turbo = config_struct->turbo;
 
     // Decoder Optimization Flag
 #if CONFIG_ENABLE_FAST_DECODE_3

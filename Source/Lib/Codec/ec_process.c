@@ -11,6 +11,9 @@
 */
 
 #include <stdlib.h>
+#include "svt_prof.h"
+SVT_PROF_DEFINE(ec)
+SVT_PROF_DEFINE_GLOBALS;
 #include <stdio.h>
 #include <string.h>
 #include "enc_handle.h"
@@ -137,7 +140,14 @@ static void reset_entropy_coding_picture(EntropyCodingContext* ctx, PictureContr
  *  Bitstream for each block
  *
  ********************************************************************************/
+EbErrorType svt_aom_entropy_coding_kernel_iter_impl(void* context);
 EbErrorType svt_aom_entropy_coding_kernel_iter(void* context) {
+    uint64_t _t0 = svt_prof_start();
+    EbErrorType _e = svt_aom_entropy_coding_kernel_iter_impl(context);
+    svt_prof_stop(ec, _t0);
+    return _e;
+}
+EbErrorType svt_aom_entropy_coding_kernel_iter_impl(void* context) {
     EntropyCodingContext* context_ptr = (EntropyCodingContext*)context;
 
     // Input

@@ -11,6 +11,11 @@
 */
 
 #include <stdlib.h>
+#include "svt_prof.h"
+SVT_PROF_DEFINE(md)
+SVT_PROF_DEFINE(md_sig)
+SVT_PROF_DEFINE(md_pd)
+SVT_PROF_DEFINE(md_enc)
 
 #include "svt_psnr.h"
 
@@ -2703,7 +2708,14 @@ static NOINLINE void avg_cdf_symbols(FRAME_CONTEXT* ctx_left, FRAME_CONTEXT* ctx
  *appropriate syntax elements to be sent to the entropy coding engine
  *
  ********************************************************************************/
+EbErrorType svt_aom_mode_decision_kernel_iter_impl(void* context);
 EbErrorType svt_aom_mode_decision_kernel_iter(void* context) {
+    uint64_t _t0 = svt_prof_start();
+    EbErrorType _e = svt_aom_mode_decision_kernel_iter_impl(context);
+    svt_prof_stop(md, _t0);
+    return _e;
+}
+EbErrorType svt_aom_mode_decision_kernel_iter_impl(void* context) {
     // Context & SCS & PCS
     EncDecContext* ed_ctx = (EncDecContext*)context;
 
@@ -2855,6 +2867,7 @@ EbErrorType svt_aom_mode_decision_kernel_iter(void* context) {
                     ed_ctx->md_ctx->sb_origin_x     = sb_origin_x;
                     ed_ctx->md_ctx->sb_origin_y     = sb_origin_y;
                     ed_ctx->sb_index                = sb_index;
+                    uint64_t _t_sig = svt_prof_start();
                     if (pcs->cdf_ctrl.enabled) {
                         if (scs->pic_based_rate_est && scs->enc_dec_segment_row_count_array == 1 &&
                             scs->enc_dec_segment_col_count_array == 1) {
@@ -2956,6 +2969,8 @@ EbErrorType svt_aom_mode_decision_kernel_iter(void* context) {
                         md_ctx->pred_depth_only = 1;
                     }
 
+                    svt_prof_stop(md_sig, _t_sig);
+                    uint64_t _t_pd = svt_prof_start();
                     const uint8_t saved_hbd_md = SVT_EFFECTIVE_HBD_MD(md_ctx->hbd_md);
                     md_ctx->hbd_md             = 0;
                     // Multi-Pass PD
@@ -3102,6 +3117,8 @@ EbErrorType svt_aom_mode_decision_kernel_iter(void* context) {
                     if (pack_blks) {
                         sb_ptr->final_blk_arr = pcs->sb_final_blk_arr_pool + pcs->sb_final_blk_arr_used;
                     }
+                    svt_prof_stop(md_pd, _t_pd);
+                    uint64_t _t_enc = svt_prof_start();
                     svt_aom_encode_sb(scs,
                                       pcs,
                                       ed_ctx,
@@ -3109,6 +3126,7 @@ EbErrorType svt_aom_mode_decision_kernel_iter(void* context) {
                                       sb_ptr->ptree,
                                       md_ctx->sb_origin_y >> 2,
                                       md_ctx->sb_origin_x >> 2);
+                    svt_prof_stop(md_enc, _t_enc);
                     if (pack_blks) {
                         pcs->sb_final_blk_arr_used += sb_ptr->final_blk_cnt;
                     }

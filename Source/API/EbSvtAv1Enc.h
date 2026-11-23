@@ -805,6 +805,17 @@ typedef struct EbSvtAv1EncConfiguration {
     *  Default is 1. */
     bool enable_dg;
     /**
+     * @brief turbo
+     *
+     * turboav1: skip the PD0 pre-pass (single-pass partition decision) and cap the
+     * max block size at 64x64. Prunes the multi-pass partition search, which is the
+     * dominant CPU cost at low presets.
+     *
+     * 0: off (default)
+     * 1: on
+     */
+    bool turbo;
+    /**
      * @brief startup_mg_size
      *
      * When enabled, a MG with specified size will be inserted after the key frame.

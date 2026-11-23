@@ -24,6 +24,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>
+#include "svt_prof.h"
 #include <stdint.h>
 #include <string.h>
 #include "app_config.h"
@@ -484,5 +485,6 @@ int main(int argc, char* argv[]) {
 #if LOG_ENC_DONE
     fprintf(stderr, "all_done_encoding  %i frames \n", tot_frames_done);
 #endif
+    svt_prof_report("SvtAv1EncApp");
     return return_error != EB_ErrorNone;
 }

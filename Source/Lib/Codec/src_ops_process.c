@@ -10,6 +10,8 @@
 */
 
 #include "pcs.h"
+#include "svt_prof.h"
+SVT_PROF_DEFINE(tpl)
 #include "sequence_control_set.h"
 
 #include "src_ops_process.h"
@@ -2074,7 +2076,14 @@ static EbErrorType tpl_mc_flow(EncodeContext* enc_ctx, SequenceControlSet* scs, 
    process one picture of TPL group
 */
 
+EbErrorType svt_aom_tpl_disp_kernel_iter_impl(void* context);
 EbErrorType svt_aom_tpl_disp_kernel_iter(void* context) {
+    uint64_t _t0 = svt_prof_start();
+    EbErrorType _e = svt_aom_tpl_disp_kernel_iter_impl(context);
+    svt_prof_stop(tpl, _t0);
+    return _e;
+}
+EbErrorType svt_aom_tpl_disp_kernel_iter_impl(void* context) {
     TplDispenserContext* context_ptr = (TplDispenserContext*)context;
     EbObjectWrapper*     in_results_wrapper_ptr;
     TplDispResults*      in_results_ptr;

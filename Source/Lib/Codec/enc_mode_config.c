@@ -2104,7 +2104,8 @@ void svt_aom_sig_deriv_multi_processes_default(SequenceControlSet* scs, PictureP
         break;
     }
     // Set the Multi-Pass PD level
-    pcs->multi_pass_pd_level = MULTI_PASS_PD_ON;
+    // turboav1: --turbo skips the PD0 pre-pass (single-pass partition decision)
+    pcs->multi_pass_pd_level = (scs->static_config.turbo) ? MULTI_PASS_PD_OFF : MULTI_PASS_PD_ON;
 
     // Set intra-bc level
     uint8_t intrabc_level = 0;
@@ -7355,6 +7356,15 @@ void svt_aom_sig_deriv_enc_dec_common(SequenceControlSet* scs, PictureControlSet
     if (scs->static_config.max_tx_size == 32) {
         // Ensure we allow at least 32x32 transforms
         ctx->depth_removal_ctrls.disallow_below_64x64 = false;
+    }
+
+    // turboav1: --turbo caps the max block size at 64x64 and disables the NSQ
+    // (non-square) partition search, pruning the PD1 partition-decision work that
+    // dominates CPU at low presets.
+    if (scs->static_config.turbo) {
+        if (ctx->max_block_size > 64)
+            ctx->max_block_size = 64;
+        ctx->nsq_search_ctrls.enabled = 0;
     }
 }
 

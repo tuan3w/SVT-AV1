@@ -10,6 +10,8 @@
 */
 
 #include <stdlib.h>
+#include "svt_prof.h"
+SVT_PROF_DEFINE(me)
 
 #include "enc_handle.h"
 #include "utility.h"
@@ -91,7 +93,14 @@ EbErrorType svt_aom_motion_estimation_context_ctor(EbThreadContext* thread_ctx, 
  * to the prediction structure pattern.  The Motion Analysis process is multithreaded,
  * so pictures can be processed out of order as long as all inputs are available.
  ************************************************/
+EbErrorType svt_aom_motion_estimation_kernel_iter_impl(void* context);
 EbErrorType svt_aom_motion_estimation_kernel_iter(void* context) {
+    uint64_t _t0 = svt_prof_start();
+    EbErrorType _e = svt_aom_motion_estimation_kernel_iter_impl(context);
+    svt_prof_stop(me, _t0);
+    return _e;
+}
+EbErrorType svt_aom_motion_estimation_kernel_iter_impl(void* context) {
     MotionEstimationContext_t* me_context_ptr = (MotionEstimationContext_t*)context;
 
     EbObjectWrapper* in_results_wrapper_ptr;

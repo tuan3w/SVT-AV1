@@ -2549,6 +2549,7 @@ EB_API EbErrorType svt_av1_enc_parse_parameter(EbSvtAv1EncConfiguration* config_
         {"enable-qm", &config_struct->enable_qm},
 #endif
         {"enable-dg", &config_struct->enable_dg},
+        {"turbo", &config_struct->turbo},
         {"gop-constraint-rc", &config_struct->gop_constraint_rc},
         {"enable-variance-boost", &config_struct->enable_variance_boost},
         {"lossless", &config_struct->lossless},
