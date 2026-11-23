@@ -10,6 +10,7 @@
 * PATENTS file, you can obtain it at https://www.aomedia.org/license/patent-license.
 */
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -66,32 +67,40 @@ static void mem_put_varsize(uint8_t* const dst, const int sz, const int val) {
 #define V9SCAN8_7  53, 60, 61, 54, 47, 55, 62, 63
 static const int16_t v9scan8[64] = { V9SCAN8_0, V9SCAN8_1, V9SCAN8_2, V9SCAN8_3,
                                      V9SCAN8_4, V9SCAN8_5, V9SCAN8_6, V9SCAN8_7 };
-static int16_t g_v9coeff[64][64]; /* 64 blocks x 64 raster coeffs, 0 = skip */
-static uint16_t g_v9eob[64];
+static int16_t*  g_v9coeff = NULL; /* nblk*64 raster coeffs, 0 = skip */
+static uint16_t* g_v9eob   = NULL; /* nblk */
+static int g_v9nblk = 0;
+static int g_v9nbx  = 0;
 static int g_v9inject = 0;
 
 int v9_inject_load(const char *path) {
+    int W = atoi(getenv("V9_INJECT_W") ? getenv("V9_INJECT_W") : "64");
+    int H = atoi(getenv("V9_INJECT_H") ? getenv("V9_INJECT_H") : "64");
+    int nbx = W >> 3, nby = H >> 3, nblk = nbx * nby;
     FILE *f = fopen(path, "rb");
     if (!f) { fprintf(stderr, "v9_inject: cannot open %s\n", path); return -1; }
-    int16_t raw[64][1 + 64 * 2];
-    size_t got = fread(raw, sizeof(int16_t), 64 * (1 + 128), f);
+    int16_t *raw = (int16_t*)malloc((size_t)nblk * (1 + 128) * sizeof(int16_t));
+    size_t got = fread(raw, sizeof(int16_t), (size_t)nblk * 129, f);
     fclose(f);
-    if (got != 64 * 129) { fprintf(stderr, "v9_inject: short read %zu\n", got); return -1; }
-    for (int b = 0; b < 64; b++) {
-        for (int i = 0; i < 64; i++) g_v9coeff[b][i] = 0;
-        int nnz = raw[b][0];
+    if (got != (size_t)nblk * 129) { fprintf(stderr, "v9_inject: short read %zu/%d\n", got, nblk * 129); free(raw); return -1; }
+    g_v9coeff = (int16_t*)malloc((size_t)nblk * 64 * sizeof(int16_t));
+    g_v9eob   = (uint16_t*)malloc((size_t)nblk * sizeof(uint16_t));
+    for (int b = 0; b < nblk; b++) {
+        for (int i = 0; i < 64; i++) g_v9coeff[(size_t)b * 64 + i] = 0;
+        int nnz = raw[(size_t)b * 129];
         uint16_t eob = 0;
         for (int i = 0; i < nnz && i < 64; i++) {
-            int idx = raw[b][1 + i * 2];
-            int val = raw[b][1 + i * 2 + 1];
-            g_v9coeff[b][idx] = (int16_t)val;
+            int idx = raw[(size_t)b * 129 + 1 + i * 2];
+            int val = raw[(size_t)b * 129 + 1 + i * 2 + 1];
+            g_v9coeff[(size_t)b * 64 + idx] = (int16_t)val;
         }
         for (int c = 63; c >= 0; c--) {
-            if (g_v9coeff[b][v9scan8[c]] != 0) { eob = c + 1; break; }
+            if (g_v9coeff[(size_t)b * 64 + v9scan8[c]] != 0) { eob = c + 1; break; }
         }
         g_v9eob[b] = eob;
     }
-    g_v9inject = 1;
+    free(raw);
+    g_v9nblk = nblk; g_v9nbx = nbx; g_v9inject = 1;
     return 0;
 }
 
@@ -619,15 +628,17 @@ static EbErrorType av1_encode_tx_coef_y(PictureControlSet* pcs, EntropyCodingCon
 
         int32_t* coeff_buffer = (int32_t*)coeff_ptr->y_buffer + ec_ctx->coded_area_sb;
 
-        /* turboav1: inject v9 GPU coefficients (64x64 all-DC + DCT_DCT frame) */
+        /* turboav1: inject v9 GPU coefficients (all-DC + DCT_DCT frame) */
         if (!g_v9inject && tx_width == 8 && tx_height == 8) {
             const char *p = getenv("V9_INJECT_FILE");
             if (p) v9_inject_load(p);
         }
         if (g_v9inject && tx_width == 8 && tx_height == 8) {
-            int raster = (int)(tx_y >> 3) * 8 + (int)(tx_x >> 3);
-            if (raster >= 0 && raster < 64) {
-                for (int i = 0; i < 64; i++) coeff_buffer[i] = (int32_t)g_v9coeff[raster][i];
+            int bx = (int)(tx_x >> 3), by = (int)(tx_y >> 3);
+            int raster = by * g_v9nbx + bx;
+            if (raster >= 0 && raster < g_v9nblk) {
+                int16_t *src = g_v9coeff + (size_t)raster * 64;
+                for (int i = 0; i < 64; i++) coeff_buffer[i] = (int32_t)src[i];
                 blk_ptr->eob.y[txb_itr] = g_v9eob[raster];
             }
         }
