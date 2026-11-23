@@ -1457,6 +1457,10 @@ static void init_md_scan(PictureControlSet* pcs, ModeDecisionContext* ctx, MdSca
     if (!use_predetermined_depths) {
         mds->split_flag = (sq_size > min_sq_size);
     }
+    /* turboav1: conformant 64x64 oracle — uniform 8x8 terminal (no 4x4). */
+    if (getenv("SVT_FORCE8") && sq_size <= 8) {
+        mds->split_flag = false;
+    }
     if (test_depth) {
         set_blocks_to_test(pcs, ctx, mds, mi_row, mi_col, mds->shapes, &mds->tot_shapes);
     } else {
@@ -1906,7 +1910,6 @@ static int refine_depth(PictureControlSet* pcs, ModeDecisionContext* ctx, PC_TRE
 
         int e_depth = 0;
         set_start_end_depth(pcs, ctx, pc_tree, max_pd0_size, min_pd0_size, &s_depth, &e_depth);
-
         if (e_depth || s_depth) {
             ctx->pred_depth_only = false;
         }

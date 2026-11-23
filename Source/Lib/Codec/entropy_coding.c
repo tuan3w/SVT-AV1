@@ -72,7 +72,12 @@ static uint16_t* g_v9eob   = NULL; /* nblk */
 static int g_v9nblk = 0;
 static int g_v9nbx  = 0;
 static int g_v9inject = 0;
-
+/* turboav1: FORCE8 oracle — 64x64 8x8 luma coeffs, flushed at frame end. */
+int16_t g_dump_coefs[64 * 64];
+/* turboav1: EC state at coefficient-start (set by caller before av1_encode_coeff_1d). */
+unsigned char *g_ecstart_ptr = NULL, *g_ecstart_buf = NULL;
+uint32_t      g_ecstart_low = 0, g_ecstart_rng = 0;
+int16_t       g_ecstart_cnt = 0;
 int v9_inject_load(const char *path) {
     int W = atoi(getenv("V9_INJECT_W") ? getenv("V9_INJECT_W") : "64");
     int H = atoi(getenv("V9_INJECT_H") ? getenv("V9_INJECT_H") : "64");
@@ -642,7 +647,6 @@ static EbErrorType av1_encode_tx_coef_y(PictureControlSet* pcs, EntropyCodingCon
                 blk_ptr->eob.y[txb_itr] = g_v9eob[raster];
             }
         }
-
         int16_t txb_skip_ctx = 0;
         int16_t dc_sign_ctx  = 0;
         svt_aom_get_txb_ctx(pcs,
@@ -807,6 +811,22 @@ static EbErrorType av1_encode_coeff_1d(PictureControlSet* pcs, EntropyCodingCont
     EbErrorType       return_error = EB_ErrorNone;
     MbModeInfo* const mbmi         = ec_ctx->mbmi;
     const int32_t     is_inter     = is_inter_mode(mbmi->block_mi.mode) || mbmi->block_mi.use_intrabc;
+    /* turboav1: dump EC state at coefficient-start (first 8x8 block) for the
+     * conformant-EC bridge. g_ecstart_* is set by the caller. */
+    static int ecstart_done = 0;
+    if (getenv("SVT_DUMPTILE") && !ecstart_done && blk_org_x == 0 && blk_org_y == 0 && g_ecstart_ptr) {
+        FILE* _df = fopen("/tmp/svt_tile_ecstart.bin", "wb");
+        if (_df) {
+            uint32_t _low = (uint32_t)g_ecstart_low, _rng = g_ecstart_rng;
+            int16_t  _cnt = g_ecstart_cnt;
+            int32_t  _nh  = (int32_t)(g_ecstart_ptr - g_ecstart_buf);
+            fwrite(&_low, 1, 4, _df); fwrite(&_rng, 1, 4, _df);
+            fwrite(&_cnt, 1, 2, _df); fwrite(&_nh, 1, 4, _df);
+            if (_nh > 0) fwrite(g_ecstart_buf, 1, _nh, _df);   /* header bytes for carry prop */
+            fclose(_df);
+        }
+        ecstart_done = 1;
+    }
     if (mbmi->block_mi.tx_depth) {
         av1_encode_tx_coef_y(pcs,
                              ec_ctx,
@@ -862,6 +882,16 @@ static EbErrorType av1_encode_coeff_1d(PictureControlSet* pcs, EntropyCodingCont
 
             int32_t* coeff_buffer = (int32_t*)coeff_ptr->y_buffer + ec_ctx->coded_area_sb;
 
+            /* turboav1: dump real luma 8x8 coefficients (FORCE8 oracle) for the
+             * conformant-EC bridge. 64 blocks x 64 raster int16 into a static
+             * buffer, flushed at frame end by ec_process.c. */
+            if (getenv("SVT_DUMPCOEF") && tx_width == 8 && tx_height == 8) {
+                static int inited = 0;
+                if (!inited) { memset(g_dump_coefs, 0, sizeof g_dump_coefs); inited = 1; }
+                int bx = (int)(tx_x >> 3), by = (int)(tx_y >> 3);
+                int16_t* dst = g_dump_coefs + ((size_t)(by * 8 + bx) * 64);
+                for (int i = 0; i < 64; i++) dst[i] = (int16_t)coeff_buffer[i];
+            }
             {
                 int16_t txb_skip_ctx = 0;
                 int16_t dc_sign_ctx  = 0;
@@ -5208,6 +5238,12 @@ static EbErrorType write_modes_b(PictureControlSet* pcs, EntropyCodingContext* e
                              skip_coeff);
             }
             if (!skip_coeff) {
+                /* turboav1: capture EC state at coefficient-start for the bridge. */
+                if (getenv("SVT_DUMPTILE")) {
+                    g_ecstart_ptr = ec_writer->ec.ptr; g_ecstart_buf = ec_writer->ec.buf;
+                    g_ecstart_low = (uint32_t)ec_writer->ec.low; g_ecstart_rng = ec_writer->ec.rng;
+                    g_ecstart_cnt = ec_writer->ec.cnt;
+                }
                 av1_encode_coeff_1d(pcs,
                                     ec_ctx,
                                     frame_context,

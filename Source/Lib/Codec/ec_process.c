@@ -26,6 +26,8 @@ SVT_PROF_DEFINE_GLOBALS;
 #include "svt_log.h"
 #include "common_dsp_rtcd.h"
 
+/* turboav1: FORCE8 oracle 64x64 8x8 luma coeffs (defined in entropy_coding.c). */
+extern int16_t g_dump_coefs[64 * 64];
 static void rest_context_dctor(EbPtr p) {
     EbThreadContext*      thread_ctx = (EbThreadContext*)p;
     EntropyCodingContext* obj        = (EntropyCodingContext*)thread_ctx->priv;
@@ -184,7 +186,6 @@ EbErrorType svt_aom_entropy_coding_kernel_iter_impl(void* context) {
         scs->seq_header.sb_size_log2;
 
     bool frame_entropy_done = false;
-
     svt_block_on_mutex(pcs->entropy_coding_pic_mutex);
     if (pcs->entropy_coding_pic_reset_flag) {
         pcs->entropy_coding_pic_reset_flag = false;
@@ -208,6 +209,18 @@ EbErrorType svt_aom_entropy_coding_kernel_iter_impl(void* context) {
                     svt_av1_reset_loop_restoration(context_ptr);
                     context_ptr->tok = pcs->tile_tok[tile_row][tile_col];
                 }
+                if (x_sb_index == 0 && y_sb_index == 0 && getenv("SVT_DUMPTILE")) {
+                    AomWriter* _w = &pcs->ec_info[tile_idx]->ec->ec_writer;
+                    OdEcEnc*   _e = &_w->ec;
+                    FILE* _df = fopen("/tmp/svt_tile_start.bin", "wb");
+                    uint32_t _low = (uint32_t)_e->low, _rng = _e->rng;
+                    int16_t  _cnt = _e->cnt;
+                    int32_t  _nh  = (int32_t)(_e->ptr - _e->buf);   /* header bytes */
+                    fwrite(&_low, 1, 4, _df); fwrite(&_rng, 1, 4, _df);
+                    fwrite(&_cnt, 1, 2, _df); fwrite(&_nh, 1, 4, _df);
+                    if (_nh > 0) fwrite(_e->buf, 1, _nh, _df);
+                    fclose(_df);
+                }
 
                 EbPictureBufferDesc* coeff_picture_ptr = pcs->ppcs->enc_dec_ptr->quantized_coeff[sb_index];
                 context_ptr->coded_area_sb             = 0;
@@ -227,6 +240,23 @@ EbErrorType svt_aom_entropy_coding_kernel_iter_impl(void* context) {
                                        sb_origin_y >> MI_SIZE_LOG2,
                                        sb_origin_x >> MI_SIZE_LOG2);
             }
+        }
+    }
+    if (getenv("SVT_DUMPTILE")) {
+        AomWriter* _w = &pcs->ec_info[tile_idx]->ec->ec_writer;
+        OdEcEnc*   _e = &_w->ec;
+        FILE*      _df = fopen("/tmp/svt_tile_ec_end.bin", "wb");
+        uint32_t _low = (uint32_t)_e->low, _rng = _e->rng;
+        int16_t  _cnt = _e->cnt;
+        int32_t  _nt  = (int32_t)(_e->ptr - _e->buf);   /* total bytes (header+tile) */
+        fwrite(&_low, 1, 4, _df); fwrite(&_rng, 1, 4, _df);
+        fwrite(&_cnt, 1, 2, _df); fwrite(&_nt, 1, 4, _df);
+        if (_nt > 0) fwrite(_e->buf, 1, _nt, _df);
+        fclose(_df);
+        /* turboav1: flush the FORCE8 oracle 64x64 8x8 luma coefficients. */
+        if (getenv("SVT_DUMPCOEF")) {
+            FILE* _cf = fopen(getenv("SVT_DUMPCOEF"), "wb");
+            if (_cf) { fwrite(g_dump_coefs, 2, 64 * 64, _cf); fclose(_cf); }
         }
     }
     bool pic_ready = true;

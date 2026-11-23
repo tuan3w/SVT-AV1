@@ -5454,6 +5454,8 @@ static void perform_tx_partitioning(ModeDecisionCandidateBuffer* cand_bf, ModeDe
                                                                                                                : false;
     uint8_t    best_tx_depth    = 0;
     uint64_t   best_cost_search = (uint64_t)~0;
+    /* turboav1: conformant 64x64 oracle — 8x8 tx only (tx_depth 0). */
+    if (getenv("SVT_FORCE8")) end_tx_depth = 0;
     uint32_t   best_coeff_count = (uint32_t)~0;
     // Transform Depth Loop
     for (ctx->tx_depth = start_tx_depth; ctx->tx_depth <= end_tx_depth; ctx->tx_depth++) {
@@ -10913,7 +10915,7 @@ void svt_aom_pick_partition_lpd1(SequenceControlSet* scs, PictureControlSet* pcs
     }
 
     // ready for next depth
-    if (mds->split_flag) {
+    if (mds->split_flag && !(getenv("SVT_FORCE8") && block_size_wide[mds->bsize] <= 8)) {
         test_split_partition_lpd1(scs, pcs, ctx, mds, pc_tree, mi_row, mi_col);
     }
 }
@@ -11268,7 +11270,7 @@ bool svt_aom_pick_partition(SequenceControlSet* scs, PictureControlSet* pcs, Mod
     }
 
     // Test lower depths if flagged to be tested
-    if (mds->split_flag) {
+    if (mds->split_flag && !(getenv("SVT_FORCE8") && block_size_wide[mds->bsize] <= 8)) {
         const bool valid_part = test_split_partition(scs, pcs, ctx, mds, pc_tree, mi_row, mi_col);
         if (!valid_part && pc_tree->rdc.valid) {
             md_update_all_neighbour_arrays_multiple(pcs, ctx, pc_tree);
