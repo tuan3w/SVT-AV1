@@ -235,7 +235,14 @@ EbErrorType svt_aom_ec_ensure_capacity(AomWriter* w, uint32_t min_free) {
 
 /*Encode a single binary value with 1/2 probability.
   val: The value to encode (0 or 1).*/
+/* turboav1: EC symbol logging (one-off, for conformant-trace generation) */
+#if defined(__has_include)
+#include <stdio.h>
+#endif
+static FILE* g_ec_log = NULL;
+static void ec_log_ensure(void) { if (!g_ec_log) { const char* p = getenv("SVT_EC_LOG"); if (p) g_ec_log = fopen(p, "w"); } }
 void svt_od_ec_encode_bool_eq_q15(OdEcEnc* enc, int val) {
+    ec_log_ensure(); if (g_ec_log) fprintf(g_ec_log, "EC B %d\n", val);
     OdEcWindow l = enc->low;
     uint32_t   r = enc->rng;
     assert(32768U <= r);
@@ -256,6 +263,7 @@ void svt_od_ec_encode_bool_eq_q15(OdEcEnc* enc, int val) {
   val: The value to encode (0 or 1).
   f: The probability that the val is one, scaled by 32768.*/
 void svt_od_ec_encode_bool_q15(OdEcEnc* enc, int val, uint32_t f) {
+    ec_log_ensure(); if (g_ec_log) fprintf(g_ec_log, "EC BQ %d %u\n", val, f);
     assert(f < 32768U);
     OdEcWindow l = enc->low;
     uint32_t   r = enc->rng;
@@ -286,6 +294,7 @@ void svt_od_ec_encode_cdf_q15(OdEcEnc* enc, int s, const uint16_t* icdf, int nsy
     assert(s >= 0);
     assert(s < nsyms);
     assert(icdf[nsyms - 1] == OD_ICDF(CDF_PROB_TOP));
+    ec_log_ensure(); if (g_ec_log) { fprintf(g_ec_log, "EC C %d %d", s, nsyms); for (int _i = 0; _i < nsyms; _i++) fprintf(g_ec_log, " %u", icdf[_i]); fprintf(g_ec_log, "\n"); }
 
     OdEcWindow l = enc->low;
     uint32_t   r = enc->rng;
